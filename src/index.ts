@@ -40,7 +40,7 @@ async function runDemo() {
         maxDailyMinutes: 70,       
         timezone: "America/New_York",
         maxRetries: 2,
-        retryDelayMs:4000    
+        retryDelayMs:5000
     };
 
     const campaign = new Campaign(config as any, callHandler, mockClock as any);

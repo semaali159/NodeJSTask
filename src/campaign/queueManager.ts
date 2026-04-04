@@ -29,6 +29,10 @@ export class QueueManager {
     
   }
 
+  peekNextRetryDueTime(): number | null {
+    return this.retryQueue.length ? this.retryQueue[0].dueTime : null;
+  }
+  
   get pendingRetries(){
     return this.retryQueue.length
   }

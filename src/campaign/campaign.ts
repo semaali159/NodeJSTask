@@ -95,18 +95,34 @@ private schedule(){
 
 }
 
-private tryNextCall(){
-    if(this.state !== 'running') return
-    if(this.activeCalls >= this.config.maxConcurrentCalls) return
+private tryNextCall(){if (this.state !== "running") return;
 
-    const now = this.clock.now()
-    const next = this.queueManager.getNext(now)
+        const now = this.clock.now();
+        const tz = this.config.timezone || 'UTC'
 
-    if(!next){
-        this.checkCompletion()
-        return
-    }
-    this.makeCall(next.phone, next.attempts)
+        if(!TimeUtils.isWithinWorkingHours(now, this.config.startTime, this.config.endTime, tz)){
+            this.pendingTimeout = this.clock.setTimeout(()=> this.schedule(), TimeUtils.msUntilStart(now,this.config.startTime, tz))
+            return
+        }
+        while (
+            this.activeCalls < this.config.maxConcurrentCalls &&
+            this.dailyMinutesUsed < this.config.maxDailyMinutes
+        ) {
+            const next = this.queueManager.getNext(now);
+            if (!next) {
+                const nextDue = this.queueManager.peekNextRetryDueTime()
+                if(nextDue !== null){
+                    const delay = Math.max(0, nextDue - now)
+                    this.pendingTimeout = this.clock.setTimeout(()=> this.tryNextCall(), delay)
+                }else{
+                    this.checkCompletion();
+                }
+               
+                return;
+            }
+
+            this.makeCall(next.phone, next.attempts);
+        }
 
 }
 private async makeCall(phone: string, attempts:number){
@@ -126,9 +142,11 @@ private async makeCall(phone: string, attempts:number){
         this.handleRetry(phone,attempts)
     }finally{
         this.activeCalls--;
-        this.clock.setTimeout(()=> this.tryNextCall(),0)
-        this.clock.setTimeout(()=> this.checkForDueRetries(), this.config.retryDelayMs + 100);
-    }
+        this.clock.setTimeout(()=> this.schedule(),0)
+        if(this.dailyMinutesUsed >= this.config.maxDailyMinutes){
+            this.schedule()
+        }
+  }
 }
 private handleRetry(phone:string, attempts:number){
     if(attempts < this.config.maxRetries){
@@ -154,11 +172,5 @@ private resetDailyIfNeeded(now: number,zone:string) {
       this.state = "completed";
     }
   }
-  private checkForDueRetries() {
-    if (this.state !== 'running') return;
-    if (this.activeCalls >= this.config.maxConcurrentCalls) return;
-
-    this.tryNextCall();
-}
 
 }
